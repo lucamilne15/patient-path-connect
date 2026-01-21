@@ -22,13 +22,13 @@ const formatTimestamp = (timestamp: string) => {
   // Defensive: rendering this page should never hard-crash due to a bad timestamp.
   // `toLocaleTimeString()` throws RangeError("Invalid time value") for invalid Dates.
   try {
-    const date = new Date(timestamp);
+  const date = new Date(timestamp);
     if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
       second: '2-digit',
-    });
+  });
   } catch {
     return '—';
   }

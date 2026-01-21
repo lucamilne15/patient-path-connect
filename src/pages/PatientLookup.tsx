@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useClinic } from '@/context/ClinicContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,9 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { InfoCard } from '@/components/ui/info-card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Search, 
   CheckCircle2, 
@@ -21,13 +24,36 @@ import {
   UserCheck,
   Coins,
   ArrowRight,
+  ExternalLink,
   Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HistoryDepth, AccessResult } from '@/types/clinic';
 
+type BookingStatus = 'confirmed' | 'pending' | 'cancelled';
+type Booking = {
+  id: string;
+  patientId: string;
+  startAt: string; // ISO
+  reason: string;
+  status: BookingStatus;
+};
+
+const formatBookingDateTime = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export default function PatientLookup() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { 
     patients, 
     settings, 
@@ -43,6 +69,48 @@ export default function PatientLookup() {
   const [requestedDepth, setRequestedDepth] = useState<HistoryDepth>('summary');
   const [accessResult, setAccessResult] = useState<AccessResult | null>(null);
   const [showResult, setShowResult] = useState(false);
+
+  // Fake bookings for prototype UX (local-only, no backend yet).
+  const bookings: Booking[] = useMemo(() => {
+    const now = Date.now();
+    const pick = (idx: number) => patients[idx % Math.max(1, patients.length)]?.id ?? '';
+    return [
+      {
+        id: 'b-1001',
+        patientId: pick(0),
+        startAt: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
+        reason: 'Initial evaluation',
+        status: 'confirmed',
+      },
+      {
+        id: 'b-1002',
+        patientId: pick(1),
+        startAt: new Date(now + 26 * 60 * 60 * 1000).toISOString(),
+        reason: 'Follow-up visit',
+        status: 'pending',
+      },
+      {
+        id: 'b-1003',
+        patientId: pick(2),
+        startAt: new Date(now - 22 * 60 * 60 * 1000).toISOString(),
+        reason: 'Re-assessment',
+        status: 'confirmed',
+      },
+      {
+        id: 'b-1004',
+        patientId: pick(0),
+        startAt: new Date(now + 5 * 24 * 60 * 60 * 1000).toISOString(),
+        reason: 'Discharge planning',
+        status: 'cancelled',
+      },
+    ].filter(b => b.patientId);
+  }, [patients]);
+
+  const [openBookingId, setOpenBookingId] = useState<string | null>(null);
+  const openBooking = bookings.find(b => b.id === openBookingId) ?? null;
+  const openBookingPatient = patients.find(p => p.id === openBooking?.patientId);
+  const [bookingRequestedDepth, setBookingRequestedDepth] = useState<HistoryDepth>('summary');
+  const [bookingAccessResult, setBookingAccessResult] = useState<AccessResult | null>(null);
 
   const selectedPatient = patients.find(p => p.id === patientId);
   const requiredCredits = requestedDepth === 'full' ? 2 : requestedDepth === 'summary' ? 1 : 0;
@@ -103,6 +171,40 @@ export default function PatientLookup() {
     navigate('/history', { state: { patientId, depth: accessResult?.grantedDepth } });
   };
 
+  const handleOpenBooking = (booking: Booking) => {
+    setOpenBookingId(booking.id);
+    setBookingRequestedDepth('summary');
+    setBookingAccessResult(null);
+  };
+
+  const handleBookingRequestHistory = () => {
+    if (!openBooking) return;
+    const patient = openBookingPatient;
+    const result = requestHistory({
+      patientId: openBooking.patientId,
+      isBooked: openBooking.status === 'confirmed',
+      hasConsent: patient?.hasConsented ?? false,
+      requestedDepth: bookingRequestedDepth,
+    });
+    setBookingAccessResult(result);
+
+    if (!result.allowed) {
+      toast({
+        title: 'Access denied',
+        description: result.reason ?? 'Unable to access patient history.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    toast({
+      title: 'Access granted',
+      description: `History available at ${result.grantedDepth} level.`,
+    });
+    setOpenBookingId(null);
+    navigate('/history', { state: { patientId: openBooking.patientId, depth: result.grantedDepth } });
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-in">
       {/* Header */}
@@ -112,6 +214,166 @@ export default function PatientLookup() {
           Request access to a patient's shared history from other clinics
         </p>
       </div>
+
+      {/* Bookings */}
+      <Card className="card-elevated">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarCheck className="w-5 h-5 text-primary" />
+            Bookings
+          </CardTitle>
+          <CardDescription>
+            Fake appointments for prototype flow — open a booking to request history.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Booking</TableHead>
+                <TableHead>Patient</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {bookings.map((b) => {
+                const patient = patients.find(p => p.id === b.patientId);
+                return (
+                  <TableRow key={b.id}>
+                    <TableCell className="font-medium">{b.id}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span>{patient?.name ?? 'Unknown'}</span>
+                        {patient?.hasConsented ? (
+                          <StatusBadge variant="success" className="text-[11px]">Consent</StatusBadge>
+                        ) : (
+                          <StatusBadge variant="blocked" className="text-[11px]">No consent</StatusBadge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatBookingDateTime(b.startAt)}</TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        variant={b.status === 'confirmed' ? 'success' : b.status === 'pending' ? 'warning' : 'blocked'}
+                      >
+                        {b.status}
+                      </StatusBadge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="secondary" size="sm" onClick={() => handleOpenBooking(b)}>
+                        Open
+                        <ExternalLink className="w-4 h-4 ml-2" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Booking details + request history */}
+      <Dialog open={!!openBookingId} onOpenChange={(open) => setOpenBookingId(open ? openBookingId : null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Booking details</DialogTitle>
+            <DialogDescription>
+              Open a booking, then request history for the patient.
+            </DialogDescription>
+          </DialogHeader>
+
+          {openBooking && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Patient</p>
+                  <p className="font-semibold">{openBookingPatient?.name ?? 'Unknown'}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    DOB: {openBookingPatient?.dateOfBirth ?? '—'}
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Appointment</p>
+                  <p className="font-semibold">{formatBookingDateTime(openBooking.startAt)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{openBooking.reason}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Booking</p>
+                  <StatusBadge
+                    variant={openBooking.status === 'confirmed' ? 'success' : openBooking.status === 'pending' ? 'warning' : 'blocked'}
+                    className="mt-2"
+                  >
+                    {openBooking.status}
+                  </StatusBadge>
+                </div>
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Consent</p>
+                  <StatusBadge
+                    variant={openBookingPatient?.hasConsented ? 'success' : 'blocked'}
+                    className="mt-2"
+                  >
+                    {openBookingPatient?.hasConsented ? 'on file' : 'missing'}
+                  </StatusBadge>
+                </div>
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <p className="text-xs text-muted-foreground">Credits</p>
+                  <p className="font-semibold mt-2">{settings.credits}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Requested history depth</Label>
+                <Select value={bookingRequestedDepth} onValueChange={(v) => setBookingRequestedDepth(v as HistoryDepth)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select depth" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="glance">Glance (free)</SelectItem>
+                    <SelectItem value="summary">Summary (1 credit)</SelectItem>
+                    <SelectItem value="full">Full (2 credits)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {bookingAccessResult && (
+                <div className={cn(
+                  "p-4 rounded-xl border",
+                  bookingAccessResult.allowed ? "border-success/30 bg-success/5" : "border-destructive/30 bg-destructive/5"
+                )}>
+                  <p className="font-medium">
+                    {bookingAccessResult.allowed ? 'Access granted' : 'Access denied'}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {bookingAccessResult.allowed
+                      ? `Granted depth: ${bookingAccessResult.grantedDepth}`
+                      : (bookingAccessResult.reason ?? 'Unable to access patient history.')}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setOpenBookingId(null)}>
+              Close
+            </Button>
+            <Button
+              onClick={handleBookingRequestHistory}
+              className="gradient-primary text-primary-foreground"
+              disabled={!openBooking}
+            >
+              Request history
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid grid-cols-3 gap-6">
         {/* Request Form */}
