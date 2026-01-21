@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useClinic } from '@/context/ClinicContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { InfoCard } from '@/components/ui/info-card';
+import { useToast } from '@/hooks/use-toast';
 import { 
   FileText, 
   Lock, 
@@ -18,7 +19,9 @@ import {
   AlertTriangle,
   Sparkles,
   Eye,
-  EyeOff
+  EyeOff,
+  CloudDownload,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HistoryDepth } from '@/types/clinic';
@@ -58,6 +61,7 @@ const contraindictionOptions = [
 ];
 
 export default function EncounterDocumentation() {
+  const { toast } = useToast();
   const { patients, settings, publishEncounter, nextWalkthroughStep, walkthroughStep } = useClinic();
   const [patientId, setPatientId] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
@@ -72,11 +76,29 @@ export default function EncounterDocumentation() {
   const [sharedDepth, setSharedDepth] = useState<HistoryDepth>('summary');
   const [isPublished, setIsPublished] = useState(false);
   const [showCreditAnimation, setShowCreditAnimation] = useState(false);
+  const [lastKineticSync, setLastKineticSync] = useState<string | null>(null);
 
   const selectedPatient = patients.find(p => p.id === patientId);
   const selectedDiagnosis = diagnoses.find(d => d.code === diagnosis);
   
   const creditsToEarn = sharedDepth === 'full' ? 3 : sharedDepth === 'summary' ? 2 : 1;
+
+  // Sample kinetic payload for prototyping (kept deterministic per render)
+  const kineticSample = useMemo(() => {
+    const fallbackPatient = patients[0];
+    return {
+      patientId: fallbackPatient?.id ?? 'p1',
+      diagnosisCode: 'M51.16',
+      bodyRegion: 'Lumbar Spine',
+      specialty: 'Orthopedic',
+      interventions: ['Manual Therapy', 'Therapeutic Exercise', 'Patient Education'],
+      outcomeScore: 72,
+      contraindications: ['Avoid heavy lifting'],
+      redFlags: 'Night pain - monitor',
+      allergies: 'Latex',
+      sharedDepth: 'summary' as HistoryDepth,
+    };
+  }, [patients]);
 
   const toggleIntervention = (intervention: string) => {
     setInterventions(prev => 
@@ -142,6 +164,26 @@ export default function EncounterDocumentation() {
     setIsPublished(false);
   };
 
+  const handleKineticImport = () => {
+    setPatientId(kineticSample.patientId);
+    setDiagnosis(kineticSample.diagnosisCode);
+    setBodyRegion(kineticSample.bodyRegion);
+    setSpecialty(kineticSample.specialty);
+    setInterventions(kineticSample.interventions);
+    setOutcomeScore([kineticSample.outcomeScore]);
+    setContraindications(kineticSample.contraindications);
+    setRedFlags(kineticSample.redFlags);
+    setAllergies(kineticSample.allergies);
+    setSharedDepth(kineticSample.sharedDepth);
+    setIsPublished(false);
+    const timestamp = new Date().toISOString();
+    setLastKineticSync(timestamp);
+    toast({
+      title: 'Kinetic ingestion complete',
+      description: 'Encounter fields were auto-filled from the latest Kinetic booking.',
+    });
+  };
+
   if (isPublished) {
     return (
       <div className="max-w-2xl mx-auto space-y-8 animate-fade-in">
@@ -189,6 +231,34 @@ export default function EncounterDocumentation() {
           Complete the visit documentation and publish a shareable summary to earn credits
         </p>
       </div>
+
+      {/* Kinetic ingestion banner */}
+      <Card className="card-elevated bg-primary/5 border-primary/20">
+        <CardContent className="py-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <CloudDownload className="w-5 h-5 text-primary" />
+              <p className="font-semibold text-foreground">Kinetic ingestion</p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Pull structured encounter data from Kinetic to pre-fill this form. Safe for prototype: no external calls.
+            </p>
+            {lastKineticSync && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <RefreshCw className="w-4 h-4" />
+                Last ingest: {new Date(lastKineticSync).toLocaleString()}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <StatusBadge variant="info">Mock data only</StatusBadge>
+            <Button onClick={handleKineticImport} className="gradient-primary text-primary-foreground" size="lg">
+              Ingest from Kinetic
+              <CloudDownload className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Main Form */}
       <div className="grid grid-cols-3 gap-6">
