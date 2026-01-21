@@ -2,8 +2,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ClinicProvider } from "@/context/ClinicContext";
+import { AppLayout } from "@/components/layout/AppLayout";
+import ClinicSettings from "@/pages/ClinicSettings";
+import EncounterDocumentation from "@/pages/EncounterDocumentation";
+import PatientLookup from "@/pages/PatientLookup";
+import HistoryFeed from "@/pages/HistoryFeed";
+import IncentivesLogs from "@/pages/IncentivesLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -11,15 +17,23 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <ClinicProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AppLayout>
+            <Routes>
+              <Route path="/" element={<Navigate to="/settings" replace />} />
+              <Route path="/settings" element={<ClinicSettings />} />
+              <Route path="/encounter" element={<EncounterDocumentation />} />
+              <Route path="/lookup" element={<PatientLookup />} />
+              <Route path="/history" element={<HistoryFeed />} />
+              <Route path="/incentives" element={<IncentivesLogs />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AppLayout>
+        </BrowserRouter>
+      </ClinicProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
