@@ -9,7 +9,6 @@ import ClinicSettings from "@/pages/ClinicSettings";
 import EncounterDocumentation from "@/pages/EncounterDocumentation";
 import PatientLookup from "@/pages/PatientLookup";
 import HistoryFeed from "@/pages/HistoryFeed";
-import IncentivesLogs from "@/pages/IncentivesLogs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,7 +27,6 @@ const App = () => (
               <Route path="/encounter" element={<EncounterDocumentation />} />
               <Route path="/lookup" element={<PatientLookup />} />
               <Route path="/history" element={<HistoryFeed />} />
-              <Route path="/incentives" element={<IncentivesLogs />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>

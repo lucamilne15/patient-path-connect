@@ -19,12 +19,19 @@ import { cn } from '@/lib/utils';
 import { LogEntry } from '@/types/clinic';
 
 const formatTimestamp = (timestamp: string) => {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
+  // Defensive: rendering this page should never hard-crash due to a bad timestamp.
+  // `toLocaleTimeString()` throws RangeError("Invalid time value") for invalid Dates.
+  try {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
 };
 
 const getLogIcon = (type: LogEntry['type']) => {

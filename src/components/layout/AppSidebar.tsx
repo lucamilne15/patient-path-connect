@@ -3,7 +3,6 @@ import {
   FileText, 
   Search, 
   History, 
-  Award,
   PlayCircle,
   Shield,
   Coins
@@ -17,7 +16,6 @@ const navItems = [
   { title: 'Document Encounter', path: '/encounter', icon: FileText },
   { title: 'Patient Lookup', path: '/lookup', icon: Search },
   { title: 'History Feed', path: '/history', icon: History },
-  { title: 'Incentives & Logs', path: '/incentives', icon: Award },
 ];
 
 export function AppSidebar() {
